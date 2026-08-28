@@ -31,7 +31,7 @@
 #endif
 
 #define PLUGIN_NAME    "POKEY (Atari 8-bit)"
-#define PLUGIN_VERSION "1.0.3"
+#define PLUGIN_VERSION "1.0.4"
 #define MAX_MODULE_BYTES ((size_t)65000)
 #define INFO_WRITE_MAX 32766
 

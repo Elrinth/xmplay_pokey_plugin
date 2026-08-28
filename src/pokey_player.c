@@ -51,6 +51,103 @@ static const char *usable_name(const char *filename)
   return NULL;
 }
 
+
+/*
+ * ASAP_Load refuses some ripped TYPE B SAPs whose last Atari COM block
+ * is a few bytes short of the end address (ASAP's length check runs
+ * before skipping the 4-byte start/end, so memcpy overruns and the
+ * final moduleIndex != moduleLen). Pad 1-16 missing tail bytes with
+ * zeros and retry. Missing FFFF between COM blocks is already OK.
+ */
+#define POKEY_COM_PAD_MAX 16
+
+static int pokey_get_word(const unsigned char *p)
+{
+  return (int)p[0] | ((int)p[1] << 8);
+}
+
+/* Offset of the SAP header's FF FF marker, or -1. */
+static int sap_header_ffff(const unsigned char *data, int len)
+{
+  int i;
+  if (len < 30 || data[0] != 'S' || data[1] != 'A' || data[2] != 'P')
+    return -1;
+  if (data[3] != '\r' || data[4] != '\n')
+    return -1;
+  for (i = 5; i + 1 < len; ++i) {
+    if (data[i] == 255) {
+      if (data[i + 1] != 255)
+        return -1;
+      return i;
+    }
+  }
+  return -1;
+}
+
+/*
+ * If the last COM block is 1-16 bytes short of its claimed end address,
+ * return a malloc'd copy padded with zeros. Caller frees. NULL = no pad.
+ */
+static unsigned char *pad_truncated_com(const unsigned char *data, int len,
+                                        int *out_len)
+{
+  int header, idx, start, end, block_len, remain, shortfall, padded_len;
+  unsigned char *out;
+
+  header = sap_header_ffff(data, len);
+  if (header < 0)
+    return NULL;
+  idx = header + 2;
+  while (idx + 5 <= len) {
+    start = pokey_get_word(data + idx);
+    end = pokey_get_word(data + idx + 2);
+    block_len = end + 1 - start;
+    if (block_len <= 0)
+      return NULL;
+    remain = len - (idx + 4);
+    if (remain < block_len) {
+      shortfall = block_len - remain;
+      if (shortfall < 1 || shortfall > POKEY_COM_PAD_MAX)
+        return NULL;
+      padded_len = len + shortfall;
+      if (padded_len > ASAPInfo_MAX_MODULE_LENGTH)
+        return NULL;
+      out = (unsigned char *)malloc((size_t)padded_len);
+      if (!out)
+        return NULL;
+      memcpy(out, data, (size_t)len);
+      memset(out + len, 0, (size_t)shortfall);
+      *out_len = padded_len;
+      return out;
+    }
+    idx += 4 + block_len;
+    if (idx == len)
+      return NULL;
+    if (idx + 7 <= len && data[idx] == 255 && data[idx + 1] == 255)
+      idx += 2;
+  }
+  return NULL;
+}
+
+static int pokey_asap_load(ASAP *a, const char *filename,
+                           const unsigned char *data, int len)
+{
+  unsigned char *padded;
+  int plen, ok;
+
+  if (!a || !data || len < 4)
+    return 0;
+  if (ASAP_Load(a, filename, data, len))
+    return 1;
+  padded = pad_truncated_com(data, len, &plen);
+  if (!padded)
+    return 0;
+  ok = ASAP_Load(a, filename, padded, plen) ? 1 : 0;
+  free(padded);
+  return ok;
+}
+
+
 int pokey_play_ms_from(int one_loop_ms, int loops_flag, int loop_count, int unknown)
 {
   int n, play;
@@ -84,7 +181,7 @@ static int silence_detect_ms(const char *filename, const unsigned char *data,
   a = ASAP_New();
   if (!a)
     return -1;
-  if (!ASAP_Load(a, usable_name(filename), data, len)) {
+  if (!pokey_asap_load(a, usable_name(filename), data, len)) {
     ASAP_Delete(a);
     return -1;
   }
@@ -169,7 +266,7 @@ int pokey_probe(const char *filename, const unsigned char *data, size_t len)
   a = ASAP_New();
   if (!a)
     return 0;
-  ok = ASAP_Load(a, usable_name(filename), data, (int)len) ? 1 : 0;
+  ok = pokey_asap_load(a, usable_name(filename), data, (int)len) ? 1 : 0;
   ASAP_Delete(a);
   return ok;
 }
@@ -192,7 +289,7 @@ int pokey_analyze(const char *filename, const unsigned char *data, size_t len,
   a = ASAP_New();
   if (!a)
     return -1;
-  if (!ASAP_Load(a, usable_name(filename), data, (int)len)) {
+  if (!pokey_asap_load(a, usable_name(filename), data, (int)len)) {
     ASAP_Delete(a);
     return -1;
   }
@@ -289,7 +386,7 @@ pokey_player *pokey_player_open(const char *filename, const unsigned char *data,
   p->ntsc = inf.ntsc;
 
   p->asap = ASAP_New();
-  if (!p->asap || !ASAP_Load(p->asap, usable_name(filename), p->module, p->module_len)) {
+  if (!p->asap || !pokey_asap_load(p->asap, usable_name(filename), p->module, p->module_len)) {
     pokey_player_close(p);
     return NULL;
   }
