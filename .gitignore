@@ -1,0 +1,5 @@
+dist/
+*.o
+*.dll
+*.exe
+*.zip
