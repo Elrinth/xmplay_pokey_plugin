@@ -510,10 +510,19 @@ static int test_bomb_song(const char *path)
     free(data);
     return -1;
   }
-  printf("title: %s  author: %s  one_loop=%d detected=%d\n",
-         inf.title, inf.author, inf.one_loop_ms[0], inf.detected[0]);
+  printf("title: %s  author: %s  one_loop=%d detected=%d LOOP=%d\n",
+         inf.title, inf.author, inf.one_loop_ms[0], inf.detected[0], inf.loops[0]);
   if (!strstr(inf.title, "Bomb")) {
     printf("FAIL  title does not contain Bomb (got '%s')\n", inf.title);
+    g_fail++;
+  }
+  /* Official ASMA TIME 02:03.08 (123080 ms). Accept 2:03-2:10, never 10:00. */
+  if (inf.one_loop_ms[0] < 123000 || inf.one_loop_ms[0] > 130000) {
+    printf("FAIL  Bomb Song one_loop=%d not in 2:03-2:10\n", inf.one_loop_ms[0]);
+    g_fail++;
+  }
+  if (inf.one_loop_ms[0] >= POKEY_DETECT_CAP_MS - 50) {
+    printf("FAIL  Bomb Song hit 10-minute cap\n");
     g_fail++;
   }
 
@@ -534,11 +543,76 @@ static int test_bomb_song(const char *path)
   return 0;
 }
 
+
+/* Greg / Toxic Cream: untagged TYPE B that loops. Must not be 10:00.
+ * Official ASMA TIME 02:49.45 LOOP = 169450 ms. */
+static int test_toxic_cream(const char *path)
+{
+  unsigned char *data;
+  size_t len;
+  pokey_info inf;
+  int delta;
+
+  printf("==== Toxic Cream register-loop detect ====\n");
+  data = slurp(path, &len);
+  if (!data) {
+    printf("FAIL  cannot read %s\n", path);
+    g_fail++;
+    return -1;
+  }
+  if (!pokey_probe(path, data, len)) {
+    printf("FAIL  pokey_probe rejected Toxic Cream\n");
+    g_fail++;
+    free(data);
+    return -1;
+  }
+  if (pokey_analyze(path, data, len, 1, &inf) != 0) {
+    printf("FAIL  pokey_analyze Toxic Cream\n");
+    g_fail++;
+    free(data);
+    return -1;
+  }
+  free(data);
+  printf("title: %s  author: %s\n", inf.title, inf.author);
+  printf("tagged=%d  one_loop=%d  play=%d  LOOP=%d  detected=%d\n",
+         inf.tagged_ms[0], inf.one_loop_ms[0], inf.play_ms[0],
+         inf.loops[0], inf.detected[0]);
+  if (!strstr(inf.title, "Toxic")) {
+    printf("FAIL  title does not contain Toxic (got '%s')\n", inf.title);
+    g_fail++;
+  }
+  if (inf.tagged_ms[0] >= 0 && !pokey_is_dummy_time(inf.tagged_ms[0])) {
+    printf("FAIL  fixture should be untagged (tagged=%d)\n", inf.tagged_ms[0]);
+    g_fail++;
+  }
+  if (!inf.detected[0]) {
+    printf("FAIL  expected detect path\n");
+    g_fail++;
+  }
+  if (!inf.loops[0]) {
+    printf("FAIL  expected LOOP flag from register-loop detect\n");
+    g_fail++;
+  }
+  delta = inf.one_loop_ms[0] - 169450;
+  if (delta < 0) delta = -delta;
+  if (delta > 1000) {
+    printf("FAIL  Toxic Cream one_loop=%d not within 1s of 169450\n",
+           inf.one_loop_ms[0]);
+    g_fail++;
+  }
+  if (inf.one_loop_ms[0] >= POKEY_DETECT_CAP_MS - 50) {
+    printf("FAIL  Toxic Cream reported 10-minute cap\n");
+    g_fail++;
+  }
+  return 0;
+}
+
 int main(int argc, char **argv)
 {
   const char *root = "tests/samples";
   char p_spy[256], p_spy0[256], p_fru[256], p_fru0[256];
   char p_heb[256], p_fc[256], p_amiga[256], p_dmf[256], p_vee[256], p_bomb[256];
+  char p_toxic[256];
   (void)argc; (void)argv;
 
   snprintf(p_spy, sizeof p_spy, "%s/Spy_vs_Spy.sap", root);
@@ -551,6 +625,7 @@ int main(int argc, char **argv)
   snprintf(p_dmf, sizeof p_dmf, "%s/dummy.dmf", root);
   snprintf(p_vee, sizeof p_vee, "%s/Veeblefetzer.sap", root);
   snprintf(p_bomb, sizeof p_bomb, "%s/bomb-song.sap", root);
+  snprintf(p_toxic, sizeof p_toxic, "%s/toxic-cream.sap", root);
 
   printf("xmp-pokey host tests  loop_count default=%d\n", POKEY_DEFAULT_LOOPS);
   if (POKEY_DEFAULT_LOOPS != 1) {
@@ -585,6 +660,7 @@ int main(int argc, char **argv)
   dump_file(p_fc);
   dump_file(p_vee);
   dump_file(p_bomb);
+  dump_file(p_toxic);
   {
     char extra[256];
     snprintf(extra, sizeof extra, "%s/Lasermania.sap", root);
@@ -602,6 +678,7 @@ int main(int argc, char **argv)
   test_file(p_heb, 2, 0);
   test_file(p_fc, 1, 0);
   test_bomb_song(p_bomb);
+  test_toxic_cream(p_toxic);
 
   /* Tagged vs silence-detect. Fruity Pete is a short one-shot (no LOOP). */
   test_detect_unknown(p_fru, p_fru0);
