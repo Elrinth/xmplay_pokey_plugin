@@ -17,15 +17,21 @@ extern "C" {
 #define POKEY_DETECT_CAP_MS    (10 * 60 * 1000)
 #define POKEY_DEFAULT_LOOPS    1
 #define POKEY_STR              128
+/* Official xmp-asap DEFAULT_SONG_LENGTH is 180s. ASMA often stamps TIME 3:00
+ * as a stub, not a measured loop. Treat that window as dummy. */
+#define POKEY_DUMMY_TIME_MS    180000
+#define POKEY_DUMMY_TIME_LO    179000
+#define POKEY_DUMMY_TIME_HI    181000
 
 typedef struct pokey_info {
   int   songs;
   int   default_song;
   int   channels;                 /* 1 or 2 */
+  int   tagged_ms[POKEY_MAX_SONGS]; /* ASAPInfo_GetDuration; -1 if none */
   int   one_loop_ms[POKEY_MAX_SONGS];
   int   play_ms[POKEY_MAX_SONGS];
   int   loops[POKEY_MAX_SONGS];   /* ASAPInfo_GetLoop */
-  int   detected[POKEY_MAX_SONGS];/* 1 if silence-detect was used */
+  int   detected[POKEY_MAX_SONGS];/* 1 if silence-detect result was used */
   char  title[POKEY_STR];
   char  author[POKEY_STR];
   char  date[POKEY_STR];
@@ -37,11 +43,14 @@ typedef struct pokey_info {
 /* Load-only probe. Returns 1 if ASAP accepts the bytes. */
 int pokey_probe(const char *filename, const unsigned char *data, size_t len);
 
-/* Fill metadata + per-song lengths (detects unknown durations). */
+/* Fill metadata + per-song lengths (detects unknown / dummy 3:00 TIME). */
 int pokey_analyze(const char *filename, const unsigned char *data, size_t len,
                   int loop_count, pokey_info *out);
 
 int pokey_play_ms_from(int one_loop_ms, int loops_flag, int loop_count, int unknown);
+
+/* 1 if ms is the 3:00 stub window (179000-181000). */
+int pokey_is_dummy_time(int ms);
 
 typedef struct pokey_player pokey_player;
 

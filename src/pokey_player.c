@@ -68,15 +68,19 @@ int pokey_play_ms_from(int one_loop_ms, int loops_flag, int loop_count, int unkn
   return play;
 }
 
-static int detect_one_loop_ms(const char *filename, const unsigned char *data,
-                              int len, int song, int *used_detect)
+int pokey_is_dummy_time(int ms)
+{
+  return ms >= POKEY_DUMMY_TIME_LO && ms <= POKEY_DUMMY_TIME_HI;
+}
+
+/* Silence-detect one loop. Cap 10 minutes. Never pass -1 to PlaySong. */
+static int silence_detect_ms(const char *filename, const unsigned char *data,
+                             int len, int song)
 {
   ASAP *a;
-  const ASAPInfo *info;
-  int tagged, pos;
   unsigned char buf[8192];
+  int pos;
 
-  if (used_detect) *used_detect = 0;
   a = ASAP_New();
   if (!a)
     return -1;
@@ -84,13 +88,6 @@ static int detect_one_loop_ms(const char *filename, const unsigned char *data,
     ASAP_Delete(a);
     return -1;
   }
-  info = ASAP_GetInfo(a);
-  tagged = ASAPInfo_GetDuration(info, song);
-  if (tagged >= 0) {
-    ASAP_Delete(a);
-    return tagged;
-  }
-  /* Unknown TIME: silence-detect with a hard 10-minute cap. Never pass -1. */
   if (!ASAP_PlaySong(a, song, POKEY_DETECT_CAP_MS)) {
     ASAP_Delete(a);
     return -1;
@@ -103,9 +100,36 @@ static int detect_one_loop_ms(const char *filename, const unsigned char *data,
   }
   pos = ASAP_GetPosition(a);
   ASAP_Delete(a);
-  if (used_detect) *used_detect = 1;
   if (pos < 0)
     pos = 0;
+  return pos;
+}
+
+/*
+ * Always compute one-loop length:
+ *   tagged < 0 (unknown TIME)           -> silence-detect
+ *   tagged in 179000-181000 (3:00 stub) -> silence-detect; if detect hits the
+ *                                          10-minute cap, keep the tagged 3:00
+ *   any other tagged >= 0               -> keep TIME (real native length)
+ */
+static int resolve_one_loop_ms(const char *filename, const unsigned char *data,
+                               int len, int song, int tagged, int *used_detect)
+{
+  int pos;
+
+  if (used_detect) *used_detect = 0;
+  if (tagged >= 0 && !pokey_is_dummy_time(tagged))
+    return tagged;
+
+  pos = silence_detect_ms(filename, data, len, song);
+  if (pos < 0)
+    return -1;
+
+  /* Dummy 3:00 + no silence before cap: true long/looping tune. Keep TIME. */
+  if (pokey_is_dummy_time(tagged) && pos >= POKEY_DETECT_CAP_MS - 50)
+    return tagged;
+
+  if (used_detect) *used_detect = 1;
   return pos;
 }
 
@@ -177,31 +201,18 @@ int pokey_analyze(const char *filename, const unsigned char *data, size_t len,
   for (i = 0; i < out->songs; ++i) {
     int tagged = ASAPInfo_GetDuration(info, i);
     int det = 0;
-    if (tagged >= 0) {
-      out->one_loop_ms[i] = tagged;
-      out->detected[i] = 0;
-    } else {
+    out->tagged_ms[i] = tagged;
+    out->one_loop_ms[i] = resolve_one_loop_ms(filename, data, (int)len, i,
+                                              tagged, &det);
+    out->detected[i] = det;
+    if (out->one_loop_ms[i] < 0) {
       ASAP_Delete(a);
-      a = NULL;
-      out->one_loop_ms[i] = detect_one_loop_ms(filename, data, (int)len, i, &det);
-      out->detected[i] = det;
-      if (out->one_loop_ms[i] < 0)
-        return -1;
-      /* reopen for remaining tagged queries / next detect uses its own instance */
-      if (i + 1 < out->songs) {
-        a = ASAP_New();
-        if (!a || !ASAP_Load(a, usable_name(filename), data, (int)len)) {
-          ASAP_Delete(a);
-          return -1;
-        }
-        info = ASAP_GetInfo(a);
-      }
+      return -1;
     }
     out->play_ms[i] = pokey_play_ms_from(out->one_loop_ms[i], out->loops[i],
                                          loop_count, out->detected[i]);
   }
-  if (a)
-    ASAP_Delete(a);
+  ASAP_Delete(a);
   return 0;
 }
 

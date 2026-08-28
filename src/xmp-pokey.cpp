@@ -31,7 +31,7 @@
 #endif
 
 #define PLUGIN_NAME    "POKEY (Atari 8-bit)"
-#define PLUGIN_VERSION "1.0.1"
+#define PLUGIN_VERSION "1.0.2"
 #define MAX_MODULE_BYTES ((size_t)65000)
 #define INFO_WRITE_MAX 32766
 
@@ -319,9 +319,11 @@ static void WINAPI pokey_About(HWND win)
     "file 638, xmp-asap 6.0.3). That plugin leaves songs without a TIME\r\n"
     "tag (for example older rips of Spy vs Spy) playing forever.\r\n\r\n"
     "This plugin uses the ASAP engine but is a separate input:\r\n"
-    "  - detects length via 2s silence (10-minute cap) when TIME is missing\r\n"
+    "  - measures length via 2s silence (10-minute cap) when TIME is\r\n"
+    "    missing or is the 3:00 stub (ASMA / xmp-asap default)\r\n"
+    "  - real TIME tags (e.g. Spy vs Spy 00:19.25) are kept as-is\r\n"
     "  - loops 1 / 2 / 3 times (default 1; non-looping TIME plays once)\r\n"
-    "  - playlist/info length is native TIME / detected one-loop\r\n"
+    "  - playlist/info length is the calculated one-loop duration\r\n"
     "  - mute POKEY 1-4 and extra/stereo POKEY 1-4\r\n"
     "  - NSF-style tracks (Shift+Left / Shift+Right)\r\n"
     "  - never calls ASAP_PlaySong(..., -1)\r\n\r\n"
@@ -472,6 +474,10 @@ static BOOL WINAPI pokey_CheckFile(const char *filename, XMPFILE file)
   return ok ? TRUE : FALSE;
 }
 
+/* FACE 4 GetFileInfo: same contract as xmp-sc68 / Ian Luck (un4seen):
+ * Alloc an array of floats (seconds) via XMPFUNC_MISC.Alloc, one per
+ * subsong; return song count | XMPIN_INFO_NOSUBTAGS. XMPlay default
+ * playlist length is 3:00 when this array is missing or 0. */
 static DWORD WINAPI pokey_GetFileInfo(const char *filename, XMPFILE file,
                                       float **length, char **tags)
 {
