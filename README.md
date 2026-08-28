@@ -1,4 +1,4 @@
-# xmp-pokey 1.0.3
+# xmp-pokey 1.0.4
 
 Native **32-bit** XMPlay input plugin for Atari 8-bit **POKEY** music.
 
@@ -17,7 +17,7 @@ build). Do not confuse the DLL name with `xmp-asap.dll` / `xmp-sap.dll`.
 ## Install
 
 Copy `xmp-pokey.dll` next to `xmplay.exe` (or into XMPlay's plugin folder)
-and restart XMPlay. The DLL carries a Windows VERSIONINFO resource (FILEVERSION 1.0.3.0) so XMPlay can include it in update notifications. Classic XMPlay is **32-bit only** — this DLL is PE32
+and restart XMPlay. The DLL carries a Windows VERSIONINFO resource (FILEVERSION 1.0.4.0) so XMPlay can include it in update notifications. Classic XMPlay is **32-bit only** — this DLL is PE32
 i386. A 64-bit build will not load.
 
 XMPlay's *Supported file types* list shows **Atari SAP / POKEY** with
@@ -37,6 +37,7 @@ extensions `sap/cmc/cm3/cmr/cms/dmc/dlt/fc/mpt/mpd/rmt/tmc/tm8/tm2`.
 
 CheckFile **loads** the file with ASAP (`ASAP_Load`), it does not trust the
 extension. SAP modules are tiny (max 65 KB) so the whole file is slurped.
+A truncated last COM block is padded so TYPE B rips like Bomb Song load.
 
 ## Length + loops
 
