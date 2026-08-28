@@ -1,4 +1,4 @@
-# xmp-pokey 1.0.1
+# xmp-pokey 1.0.2
 
 Native **32-bit** XMPlay input plugin for Atari 8-bit **POKEY** music.
 
@@ -40,24 +40,29 @@ extension. SAP modules are tiny (max 65 KB) so the whole file is slurped.
 
 ## Length + loops
 
-When ASAP reports `GetDuration(song) >= 0` (a `TIME` tag):
+Lengths are **measured**, not trusted blindly:
 
-- looping songs play `duration × loop_count`
-- non-looping songs play the tagged duration once (extra loops ignored)
+- A real `TIME` tag (anything other than 3:00) is kept. Example:
+  *Spy vs Spy* `TIME 00:19.25` stays 19250 ms.
+- Missing `TIME` (`GetDuration` = −1) or the **3:00 stub**
+  (`180000` ms, also 179000–181000) is silence-detected:
+  `ASAP_DetectSilence(2)`, generate until silence or a **10-minute** cap.
+  If the stub was 3:00 and detect hits the cap (true long/looping tune),
+  the tagged 3:00 is kept instead of reporting 10 minutes.
+- Official xmp-asap's default song length is 180 seconds; ASMA often
+  stamps `TIME 03:00` as a dummy. This plugin does not treat that as a
+  measured loop.
 
 `loop_count` is **1, 2, or 3** (default **1**), set in the plugin config.
 
-When duration is unknown (`-1`, the official-plugin infinite-play case):
+- looping songs play `one_loop × loop_count`
+- non-looping tagged songs play the tagged duration once
+- detected (unknown / dummy) songs play `one_loop × loop_count`
 
-1. `ASAP_DetectSilence(2)`
-2. skip-render until generate returns 0 (silence) or a **10-minute** cap
-3. that position is one-loop length, then multiplied by `loop_count`
-4. reload and `PlaySong(song, play_ms)` so playback actually ends
-
-Playlist / file-info length is the **native** one-loop duration (`TIME`,
-or the detected one-loop if `TIME` is missing). Extra loops still play
-when configured — the seekbar uses `duration × loop_count` for looping
-songs — but XMPlay's playlist does not multiply by the loop setting.
+Playlist / file-info length is the **calculated one-loop** duration.
+GetFileInfo always runs this measurement so the list is not XMPlay's
+3:00 fallback. Extra loops still play when configured — the seekbar
+uses `SetLength(play_ms)` — but the playlist shows one loop.
 
 The plugin **never** calls `ASAP_PlaySong(..., -1)`. The playhead is
 seekable (`SetLength(seconds, TRUE)`).

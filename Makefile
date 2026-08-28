@@ -3,7 +3,7 @@
 #   /usr/bin/make          # host tests + 32-bit DLL
 #   /usr/bin/make dll      # dist/xmp-pokey.dll
 #   /usr/bin/make test     # host render/seek/detect tests
-#   /usr/bin/make pack     # /workspace/xmp-pokey-1.0.1.zip
+#   /usr/bin/make pack     # /workspace/xmp-pokey-1.0.2.zip
 #
 # If `make` is a wrapper, invoke GNU make explicitly.
 
@@ -71,12 +71,12 @@ $(DIST)/xmp-pokey.dll: $(SRC)/xmp-pokey.cpp $(SRC)/xmp-pokey.def $(OBJW)/asap.o 
 	file $@
 
 pack: dll
-	rm -f /workspace/xmp-pokey-1.0.1.zip
+	rm -f /workspace/xmp-pokey-1.0.2.zip
 	mkdir -p $(DIST)/pack
 	cp -f $(DIST)/xmp-pokey.dll $(ROOT)/README.md $(DIST)/pack/
-	cd $(DIST)/pack && zip -9 /workspace/xmp-pokey-1.0.1.zip xmp-pokey.dll README.md
+	cd $(DIST)/pack && zip -9 /workspace/xmp-pokey-1.0.2.zip xmp-pokey.dll README.md
 	rm -rf $(DIST)/pack
-	ls -l /workspace/xmp-pokey-1.0.1.zip
+	ls -l /workspace/xmp-pokey-1.0.2.zip
 
 clean:
 	rm -rf $(DIST)/xmp-pokey.dll $(DIST)/test_asap_render $(DIST)/obj $(DIST)/obj-i686 $(DIST)/pack
