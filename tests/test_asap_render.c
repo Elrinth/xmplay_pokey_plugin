@@ -450,11 +450,95 @@ static int test_spy_keeps_19250(const char *spy_path)
   return 0;
 }
 
+
+/* Greg / Bomb Song: last COM block is 2 bytes short; wrapper must pad. */
+static int test_bomb_song(const char *path)
+{
+  unsigned char *data;
+  size_t len;
+  pokey_info inf;
+  pokey_player *p;
+  double rms, peak;
+  int frames, i, idx, start, end, block_len, player_inside;
+
+  printf("==== Bomb Song truncated COM ====\n");
+  data = slurp(path, &len);
+  if (!data) {
+    printf("FAIL  cannot read bomb-song.sap\n");
+    g_fail++;
+    return -1;
+  }
+  printf("file: %zu bytes\n", len);
+
+  /* Dump COM blocks: PLAYER $0503 must sit in the INIT $04F3 block. */
+  idx = -1;
+  for (i = 5; i + 1 < (int)len; ++i) {
+    if (data[i] == 255 && data[i + 1] == 255) { idx = i + 2; break; }
+  }
+  player_inside = 0;
+  i = 0;
+  while (idx >= 0 && idx + 5 <= (int)len) {
+    start = data[idx] | (data[idx + 1] << 8);
+    end = data[idx + 2] | (data[idx + 3] << 8);
+    block_len = end + 1 - start;
+    printf("  COM[%d] $%04X-$%04X  claimed=%d  remain_after_hdr=%d\n",
+           i, start, end, block_len, (int)len - (idx + 4));
+    if (start <= 0x0503 && 0x0503 <= end)
+      player_inside = 1;
+    if (block_len <= 0)
+      break;
+    idx += 4 + block_len;
+    if (idx == (int)len)
+      break;
+    if (idx + 1 < (int)len && data[idx] == 255 && data[idx + 1] == 255)
+      idx += 2;
+    if (++i > 8)
+      break;
+  }
+  printf("PLAYER $0503 inside INIT $04F3 block: %s\n",
+         player_inside ? "yes" : "NO");
+
+  if (!pokey_probe(path, data, len)) {
+    printf("FAIL  pokey_probe rejected bomb-song.sap\n");
+    g_fail++;
+    free(data);
+    return -1;
+  }
+  if (pokey_analyze(path, data, len, 1, &inf) != 0) {
+    printf("FAIL  pokey_analyze bomb-song.sap\n");
+    g_fail++;
+    free(data);
+    return -1;
+  }
+  printf("title: %s  author: %s  one_loop=%d detected=%d\n",
+         inf.title, inf.author, inf.one_loop_ms[0], inf.detected[0]);
+  if (!strstr(inf.title, "Bomb")) {
+    printf("FAIL  title does not contain Bomb (got '%s')\n", inf.title);
+    g_fail++;
+  }
+
+  p = pokey_player_open(path, data, len, 1, 0);
+  free(data);
+  if (!p) {
+    printf("FAIL  pokey_player_open bomb-song.sap\n");
+    g_fail++;
+    return -1;
+  }
+  frames = render_sec(p, 2.0, &rms, &peak);
+  printf("render 2.0s: frames=%d  rms=%.5f  peak=%.5f\n", frames, rms, peak);
+  if (rms < 1e-4 || peak < 1e-4) {
+    printf("FAIL  Bomb Song render is silent\n");
+    g_fail++;
+  }
+  pokey_player_close(p);
+  return 0;
+}
+
 int main(int argc, char **argv)
 {
   const char *root = "tests/samples";
   char p_spy[256], p_spy0[256], p_fru[256], p_fru0[256];
-  char p_heb[256], p_fc[256], p_amiga[256], p_dmf[256], p_vee[256];
+  char p_heb[256], p_fc[256], p_amiga[256], p_dmf[256], p_vee[256], p_bomb[256];
   (void)argc; (void)argv;
 
   snprintf(p_spy, sizeof p_spy, "%s/Spy_vs_Spy.sap", root);
@@ -466,6 +550,7 @@ int main(int argc, char **argv)
   snprintf(p_amiga, sizeof p_amiga, "%s/amiga_dummy.fc", root);
   snprintf(p_dmf, sizeof p_dmf, "%s/dummy.dmf", root);
   snprintf(p_vee, sizeof p_vee, "%s/Veeblefetzer.sap", root);
+  snprintf(p_bomb, sizeof p_bomb, "%s/bomb-song.sap", root);
 
   printf("xmp-pokey host tests  loop_count default=%d\n", POKEY_DEFAULT_LOOPS);
   if (POKEY_DEFAULT_LOOPS != 1) {
@@ -499,6 +584,7 @@ int main(int argc, char **argv)
   dump_file(p_heb);
   dump_file(p_fc);
   dump_file(p_vee);
+  dump_file(p_bomb);
   {
     char extra[256];
     snprintf(extra, sizeof extra, "%s/Lasermania.sap", root);
@@ -515,6 +601,7 @@ int main(int argc, char **argv)
   test_file(p_spy, 1, 0);
   test_file(p_heb, 2, 0);
   test_file(p_fc, 1, 0);
+  test_bomb_song(p_bomb);
 
   /* Tagged vs silence-detect. Fruity Pete is a short one-shot (no LOOP). */
   test_detect_unknown(p_fru, p_fru0);
