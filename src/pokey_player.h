@@ -15,7 +15,7 @@ extern "C" {
 #define POKEY_MAX_SONGS        32
 #define POKEY_MAX_MODULE       65000
 #define POKEY_DETECT_CAP_MS    (10 * 60 * 1000)
-#define POKEY_DEFAULT_LOOPS    2
+#define POKEY_DEFAULT_LOOPS    1
 #define POKEY_STR              128
 
 typedef struct pokey_info {
@@ -61,6 +61,7 @@ int    pokey_player_was_loop(const pokey_player *p, int song0);
 int    pokey_player_position_ms(const pokey_player *p);
 int    pokey_player_seek_ms(pokey_player *p, int ms);
 int    pokey_player_total_play_ms(const pokey_player *p);
+int    pokey_player_total_one_loop_ms(const pokey_player *p);
 
 void   pokey_player_set_mute(pokey_player *p, int mask);
 int    pokey_player_mute(const pokey_player *p);

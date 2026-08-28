@@ -376,6 +376,16 @@ int pokey_player_total_play_ms(const pokey_player *p)
   return t;
 }
 
+int pokey_player_total_one_loop_ms(const pokey_player *p)
+{
+  int i, t = 0;
+  if (!p)
+    return 0;
+  for (i = 0; i < p->songs; ++i)
+    t += p->one_loop_ms[i];
+  return t;
+}
+
 void pokey_player_set_mute(pokey_player *p, int mask)
 {
   if (!p)

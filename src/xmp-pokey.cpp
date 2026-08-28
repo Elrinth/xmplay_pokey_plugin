@@ -31,7 +31,7 @@
 #endif
 
 #define PLUGIN_NAME    "POKEY (Atari 8-bit)"
-#define PLUGIN_VERSION "1.0.0"
+#define PLUGIN_VERSION "1.0.1"
 #define MAX_MODULE_BYTES ((size_t)65000)
 #define INFO_WRITE_MAX 32766
 
@@ -320,7 +320,8 @@ static void WINAPI pokey_About(HWND win)
     "tag (for example older rips of Spy vs Spy) playing forever.\r\n\r\n"
     "This plugin uses the ASAP engine but is a separate input:\r\n"
     "  - detects length via 2s silence (10-minute cap) when TIME is missing\r\n"
-    "  - loops 1 / 2 / 3 times (default 2; non-looping TIME plays once)\r\n"
+    "  - loops 1 / 2 / 3 times (default 1; non-looping TIME plays once)\r\n"
+    "  - playlist/info length is native TIME / detected one-loop\r\n"
     "  - mute POKEY 1-4 and extra/stereo POKEY 1-4\r\n"
     "  - NSF-style tracks (Shift+Left / Shift+Right)\r\n"
     "  - never calls ASAP_PlaySong(..., -1)\r\n\r\n"
@@ -503,7 +504,7 @@ static DWORD WINAPI pokey_GetFileInfo(const char *filename, XMPFILE file,
     float *lens = (float *)xmp_alloc((DWORD)(sizeof(float) * (unsigned)n));
     if (lens) {
       for (i = 0; i < n; ++i)
-        lens[i] = (float)inf.play_ms[i] / 1000.0f;
+        lens[i] = (float)inf.one_loop_ms[i] / 1000.0f;
     }
     *length = lens;
   }
@@ -585,7 +586,7 @@ static void WINAPI pokey_GetInfoText(char *format, char *length)
     bounded_copy(format, 256, tmp);
   }
   if (length) {
-    play = pokey_player_play_ms(g_play, pokey_player_song(g_play));
+    play = pokey_player_one_loop_ms(g_play, pokey_player_song(g_play));
     m = play / 60000;
     s = (play / 1000) % 60;
     if (pokey_player_songs(g_play) > 1)
@@ -687,7 +688,7 @@ static DWORD WINAPI pokey_GetSubSongs(float *length)
   if (!g_play)
     return 0;
   if (length)
-    *length = (float)pokey_player_total_play_ms(g_play) / 1000.0f;
+    *length = (float)pokey_player_total_one_loop_ms(g_play) / 1000.0f;
   return (DWORD)pokey_player_songs(g_play);
 }
 
