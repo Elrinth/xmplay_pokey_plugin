@@ -1,4 +1,4 @@
-# xmp-pokey 1.0.0
+# xmp-pokey 1.0.1
 
 Native **32-bit** XMPlay input plugin for Atari 8-bit **POKEY** music.
 
@@ -45,7 +45,7 @@ When ASAP reports `GetDuration(song) >= 0` (a `TIME` tag):
 - looping songs play `duration × loop_count`
 - non-looping songs play the tagged duration once (extra loops ignored)
 
-`loop_count` is **1, 2, or 3** (default **2**), set in the plugin config.
+`loop_count` is **1, 2, or 3** (default **1**), set in the plugin config.
 
 When duration is unknown (`-1`, the official-plugin infinite-play case):
 
@@ -53,6 +53,11 @@ When duration is unknown (`-1`, the official-plugin infinite-play case):
 2. skip-render until generate returns 0 (silence) or a **10-minute** cap
 3. that position is one-loop length, then multiplied by `loop_count`
 4. reload and `PlaySong(song, play_ms)` so playback actually ends
+
+Playlist / file-info length is the **native** one-loop duration (`TIME`,
+or the detected one-loop if `TIME` is missing). Extra loops still play
+when configured — the seekbar uses `duration × loop_count` for looping
+songs — but XMPlay's playlist does not multiply by the loop setting.
 
 The plugin **never** calls `ASAP_PlaySong(..., -1)`. The playhead is
 seekable (`SetLength(seconds, TRUE)`).
