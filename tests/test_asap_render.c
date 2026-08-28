@@ -324,6 +324,28 @@ int main(int argc, char **argv)
   snprintf(p_vee, sizeof p_vee, "%s/Veeblefetzer.sap", root);
 
   printf("xmp-pokey host tests  loop_count default=%d\n", POKEY_DEFAULT_LOOPS);
+  if (POKEY_DEFAULT_LOOPS != 1) {
+    printf("FAIL  default loops is %d, expected 1\n", POKEY_DEFAULT_LOOPS);
+    g_fail++;
+  }
+
+  /* Default loops=1: looping TIME play_ms must equal native one_loop_ms. */
+  {
+    unsigned char *d; size_t n; pokey_info inf;
+    d = slurp(p_spy, &n);
+    if (!d || pokey_analyze(p_spy, d, n, POKEY_DEFAULT_LOOPS, &inf) != 0) {
+      printf("FAIL  default-loop analyze\n");
+      g_fail++;
+    } else {
+      printf("==== default loops=%d  Spy vs Spy one_loop=%d play=%d loop=%d ====\n",
+             POKEY_DEFAULT_LOOPS, inf.one_loop_ms[0], inf.play_ms[0], inf.loops[0]);
+      if (inf.loops[0] && inf.play_ms[0] != inf.one_loop_ms[0]) {
+        printf("FAIL  default loops should not multiply playlist/native length\n");
+        g_fail++;
+      }
+    }
+    free(d);
+  }
 
   test_file(p_spy, 1, 0);
   test_file(p_heb, 2, 0);
