@@ -1,4 +1,4 @@
-# xmp-pokey 1.0.4
+# xmp-pokey 1.0.5
 
 Native **32-bit** XMPlay input plugin for Atari 8-bit **POKEY** music.
 
@@ -17,7 +17,7 @@ build). Do not confuse the DLL name with `xmp-asap.dll` / `xmp-sap.dll`.
 ## Install
 
 Copy `xmp-pokey.dll` next to `xmplay.exe` (or into XMPlay's plugin folder)
-and restart XMPlay. The DLL carries a Windows VERSIONINFO resource (FILEVERSION 1.0.4.0) so XMPlay can include it in update notifications. Classic XMPlay is **32-bit only** — this DLL is PE32
+and restart XMPlay. The DLL carries a Windows VERSIONINFO resource (FILEVERSION 1.0.5.0) so XMPlay can include it in update notifications. Classic XMPlay is **32-bit only** — this DLL is PE32
 i386. A 64-bit build will not load.
 
 XMPlay's *Supported file types* list shows **Atari SAP / POKEY** with
@@ -46,13 +46,16 @@ Lengths are **measured**, not trusted blindly:
 - A real `TIME` tag (anything other than 3:00) is kept. Example:
   *Spy vs Spy* `TIME 00:19.25` stays 19250 ms.
 - Missing `TIME` (`GetDuration` = −1) or the **3:00 stub**
-  (`180000` ms, also 179000–181000) is silence-detected:
-  `ASAP_DetectSilence(2)`, generate until silence or a **10-minute** cap.
-  If the stub was 3:00 and detect hits the cap (true long/looping tune),
-  the tagged 3:00 is kept instead of reporting 10 minutes.
+  (`180000` ms, also 179000–181000) is measured with an asapscan-style
+  **POKEY-register** loop + silence detector (no 10-minute PCM generate):
+  - silence (all volumes 0 for 5 s) → one-loop = silence start, not looping
+  - matching register windows (`loop_check` 3 min, `loop_min` 5 s) →
+    one-loop = loop point, marked looping
+  - only if neither: the **10-minute** cap is last resort
 - Official xmp-asap's default song length is 180 seconds; ASMA often
   stamps `TIME 03:00` as a dummy. This plugin does not treat that as a
-  measured loop.
+  measured loop. Untagged looping tunes such as *Toxic Cream* are
+  measured (ASMA `TIME 02:49.45 LOOP`), not reported as 10:00.
 
 `loop_count` is **1, 2, or 3** (default **1**), set in the plugin config.
 
