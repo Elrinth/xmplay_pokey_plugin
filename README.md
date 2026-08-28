@@ -1,4 +1,4 @@
-# xmp-pokey 1.0.2
+# xmp-pokey 1.0.3
 
 Native **32-bit** XMPlay input plugin for Atari 8-bit **POKEY** music.
 
@@ -17,7 +17,7 @@ build). Do not confuse the DLL name with `xmp-asap.dll` / `xmp-sap.dll`.
 ## Install
 
 Copy `xmp-pokey.dll` next to `xmplay.exe` (or into XMPlay's plugin folder)
-and restart XMPlay. Classic XMPlay is **32-bit only** — this DLL is PE32
+and restart XMPlay. The DLL carries a Windows VERSIONINFO resource (FILEVERSION 1.0.3.0) so XMPlay can include it in update notifications. Classic XMPlay is **32-bit only** — this DLL is PE32
 i386. A 64-bit build will not load.
 
 XMPlay's *Supported file types* list shows **Atari SAP / POKEY** with

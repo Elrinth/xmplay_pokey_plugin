@@ -3,7 +3,7 @@
 #   /usr/bin/make          # host tests + 32-bit DLL
 #   /usr/bin/make dll      # dist/xmp-pokey.dll
 #   /usr/bin/make test     # host render/seek/detect tests
-#   /usr/bin/make pack     # /workspace/xmp-pokey-1.0.2.zip
+#   /usr/bin/make pack     # /workspace/xmp-pokey-1.0.3.zip
 #
 # If `make` is a wrapper, invoke GNU make explicitly.
 
@@ -58,25 +58,29 @@ $(DIST)/test_asap_render: $(ROOT)/tests/test_asap_render.c $(OBJ)/asap.o $(OBJ)/
 	# tests resolve samples relative to cwd
 	# run from ROOT
 
-$(DIST)/xmp-pokey.dll: $(SRC)/xmp-pokey.cpp $(SRC)/xmp-pokey.def $(OBJW)/asap.o $(OBJW)/pokey_player.o
+$(OBJW)/xmp-pokey.res: $(SRC)/xmp-pokey.rc
+	@mkdir -p $(dir $@)
+	$(I686_HOST)-windres -O coff -o $@ $<
+
+$(DIST)/xmp-pokey.dll: $(SRC)/xmp-pokey.cpp $(SRC)/xmp-pokey.def $(OBJW)/asap.o $(OBJW)/pokey_player.o $(OBJW)/xmp-pokey.res
 	mkdir -p $(DIST)
 	$(I686_CXX) -shared -O2 -DNDEBUG -std=c++14 \
 	  -static -static-libgcc -static-libstdc++ \
 	  -I$(INC) -I$(SRC) -I$(ASAP) -DWIN32 -D_WIN32 \
 	  -o $@ $(SRC)/xmp-pokey.cpp $(SRC)/xmp-pokey.def \
-	  $(OBJW)/asap.o $(OBJW)/pokey_player.o \
+	  $(OBJW)/asap.o $(OBJW)/pokey_player.o $(OBJW)/xmp-pokey.res \
 	  -Wl,--kill-at -Wl,--add-stdcall-alias \
 	  -luser32 -lgdi32 -Wl,-s
 	$(I686_HOST)-objdump -p $@ | grep -E 'dll name|XMPIN_GetInterface|file format' || true
 	file $@
 
 pack: dll
-	rm -f /workspace/xmp-pokey-1.0.2.zip
+	rm -f /workspace/xmp-pokey-1.0.3.zip
 	mkdir -p $(DIST)/pack
 	cp -f $(DIST)/xmp-pokey.dll $(ROOT)/README.md $(DIST)/pack/
-	cd $(DIST)/pack && zip -9 /workspace/xmp-pokey-1.0.2.zip xmp-pokey.dll README.md
+	cd $(DIST)/pack && zip -9 /workspace/xmp-pokey-1.0.3.zip xmp-pokey.dll README.md
 	rm -rf $(DIST)/pack
-	ls -l /workspace/xmp-pokey-1.0.2.zip
+	ls -l /workspace/xmp-pokey-1.0.3.zip
 
 clean:
 	rm -rf $(DIST)/xmp-pokey.dll $(DIST)/test_asap_render $(DIST)/obj $(DIST)/obj-i686 $(DIST)/pack
