@@ -31,7 +31,7 @@ typedef struct pokey_info {
   int   one_loop_ms[POKEY_MAX_SONGS];
   int   play_ms[POKEY_MAX_SONGS];
   int   loops[POKEY_MAX_SONGS];   /* ASAPInfo_GetLoop */
-  int   detected[POKEY_MAX_SONGS];/* 1 if silence-detect result was used */
+  int   detected[POKEY_MAX_SONGS];/* 1 if loop/silence-detect was used */
   char  title[POKEY_STR];
   char  author[POKEY_STR];
   char  date[POKEY_STR];
@@ -43,7 +43,7 @@ typedef struct pokey_info {
 /* Load-only probe. Returns 1 if ASAP accepts the bytes. */
 int pokey_probe(const char *filename, const unsigned char *data, size_t len);
 
-/* Fill metadata + per-song lengths (detects unknown / dummy 3:00 TIME). */
+/* Fill metadata + per-song lengths (loop/silence-detect unknown / dummy 3:00). */
 int pokey_analyze(const char *filename, const unsigned char *data, size_t len,
                   int loop_count, pokey_info *out);
 

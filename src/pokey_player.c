@@ -3,6 +3,7 @@
  * Never calls ASAP_PlaySong(..., -1).
  */
 #include "pokey_player.h"
+#include "pokey_scan.h"
 #include "asap.h"
 
 #include <stdlib.h>
@@ -170,14 +171,17 @@ int pokey_is_dummy_time(int ms)
   return ms >= POKEY_DUMMY_TIME_LO && ms <= POKEY_DUMMY_TIME_HI;
 }
 
-/* Silence-detect one loop. Cap 10 minutes. Never pass -1 to PlaySong. */
-static int silence_detect_ms(const char *filename, const unsigned char *data,
-                             int len, int song)
+/*
+ * asapscan-style silence + POKEY-register loop detect.
+ * Never pass -1 to PlaySong. Cap 10 minutes only if neither is found.
+ */
+static int detect_one_loop_ms(const char *filename, const unsigned char *data,
+                              int len, int song, int *out_loop)
 {
   ASAP *a;
-  unsigned char buf[8192];
-  int pos;
+  int ms, is_loop, found;
 
+  if (out_loop) *out_loop = 0;
   a = ASAP_New();
   if (!a)
     return -1;
@@ -189,42 +193,39 @@ static int silence_detect_ms(const char *filename, const unsigned char *data,
     ASAP_Delete(a);
     return -1;
   }
-  ASAP_DetectSilence(a, 2);
-  for (;;) {
-    int n = ASAP_Generate(a, buf, (int)sizeof buf, ASAPSampleFormat_S16_L_E);
-    if (n <= 0)
-      break;
+  if (pokey_scan_from_asap(a, &ms, &is_loop, &found) != 0) {
+    ASAP_Delete(a);
+    return -1;
   }
-  pos = ASAP_GetPosition(a);
   ASAP_Delete(a);
-  if (pos < 0)
-    pos = 0;
-  return pos;
+  if (out_loop) *out_loop = is_loop;
+  if (ms < 0)
+    ms = 0;
+  return ms;
 }
 
 /*
  * Always compute one-loop length:
- *   tagged < 0 (unknown TIME)           -> silence-detect
- *   tagged in 179000-181000 (3:00 stub) -> silence-detect; if detect hits the
- *                                          10-minute cap, keep the tagged 3:00
+ *   tagged < 0 (unknown TIME)           -> register loop / silence detect
+ *   tagged in 179000-181000 (3:00 stub) -> same detect (dummy is not a length)
  *   any other tagged >= 0               -> keep TIME (real native length)
+ * Detected loop sets *out_loop = 1. Silence or cap sets 0.
+ * Only if neither silence nor loop: one_loop = 10-minute cap.
  */
 static int resolve_one_loop_ms(const char *filename, const unsigned char *data,
-                               int len, int song, int tagged, int *used_detect)
+                               int len, int song, int tagged, int *used_detect,
+                               int *out_loop)
 {
   int pos;
 
   if (used_detect) *used_detect = 0;
+  if (out_loop) *out_loop = 0;
   if (tagged >= 0 && !pokey_is_dummy_time(tagged))
     return tagged;
 
-  pos = silence_detect_ms(filename, data, len, song);
+  pos = detect_one_loop_ms(filename, data, len, song, out_loop);
   if (pos < 0)
     return -1;
-
-  /* Dummy 3:00 + no silence before cap: true long/looping tune. Keep TIME. */
-  if (pokey_is_dummy_time(tagged) && pos >= POKEY_DETECT_CAP_MS - 50)
-    return tagged;
 
   if (used_detect) *used_detect = 1;
   return pos;
@@ -298,10 +299,13 @@ int pokey_analyze(const char *filename, const unsigned char *data, size_t len,
   for (i = 0; i < out->songs; ++i) {
     int tagged = ASAPInfo_GetDuration(info, i);
     int det = 0;
+    int is_loop = 0;
     out->tagged_ms[i] = tagged;
     out->one_loop_ms[i] = resolve_one_loop_ms(filename, data, (int)len, i,
-                                              tagged, &det);
+                                              tagged, &det, &is_loop);
     out->detected[i] = det;
+    if (det)
+      out->loops[i] = is_loop;
     if (out->one_loop_ms[i] < 0) {
       ASAP_Delete(a);
       return -1;

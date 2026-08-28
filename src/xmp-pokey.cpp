@@ -31,7 +31,7 @@
 #endif
 
 #define PLUGIN_NAME    "POKEY (Atari 8-bit)"
-#define PLUGIN_VERSION "1.0.4"
+#define PLUGIN_VERSION "1.0.5"
 #define MAX_MODULE_BYTES ((size_t)65000)
 #define INFO_WRITE_MAX 32766
 
@@ -319,8 +319,8 @@ static void WINAPI pokey_About(HWND win)
     "file 638, xmp-asap 6.0.3). That plugin leaves songs without a TIME\r\n"
     "tag (for example older rips of Spy vs Spy) playing forever.\r\n\r\n"
     "This plugin uses the ASAP engine but is a separate input:\r\n"
-    "  - measures length via 2s silence (10-minute cap) when TIME is\r\n"
-    "    missing or is the 3:00 stub (ASMA / xmp-asap default)\r\n"
+    "  - measures untagged / dummy-3:00 length via POKEY-register\r\n"
+    "    loop+silence detect (asapscan-style); 10 min is last resort\r\n"
     "  - real TIME tags (e.g. Spy vs Spy 00:19.25) are kept as-is\r\n"
     "  - loops 1 / 2 / 3 times (default 1; non-looping TIME plays once)\r\n"
     "  - playlist/info length is the calculated one-loop duration\r\n"
