@@ -306,6 +306,150 @@ static int test_reject(const char *path)
   return 0;
 }
 
+/* Insert a TIME line immediately after "SAP\r\n". */
+static unsigned char *insert_time_tag(const unsigned char *src, size_t n,
+                                      const char *time_line, size_t *out_n)
+{
+  const char sap[] = "SAP\r\n";
+  size_t tlen;
+  unsigned char *out;
+  if (!src || n < 5 || memcmp(src, sap, 5) != 0 || !time_line)
+    return NULL;
+  tlen = strlen(time_line);
+  out = (unsigned char *)malloc(n + tlen);
+  if (!out) return NULL;
+  memcpy(out, src, 5);
+  memcpy(out + 5, time_line, tlen);
+  memcpy(out + 5 + tlen, src + 5, n - 5);
+  *out_n = n + tlen;
+  return out;
+}
+
+static void dump_file(const char *path)
+{
+  unsigned char *data;
+  size_t len;
+  pokey_info inf;
+  const char *base;
+  int i;
+
+  base = strrchr(path, '/');
+  base = base ? base + 1 : path;
+  data = slurp(path, &len);
+  if (!data) {
+    printf("DUMP  %-28s  cannot read\n", base);
+    return;
+  }
+  if (pokey_analyze(path, data, len, 1, &inf) != 0) {
+    printf("DUMP  %-28s  analyze FAIL (%zu bytes)\n", base, len);
+    free(data);
+    return;
+  }
+  for (i = 0; i < inf.songs; ++i) {
+    printf("DUMP  %-28s  song %d  tagged=%d  LOOP=%d  analyzed=%d  detected=%d%s\n",
+           base, i, inf.tagged_ms[i], inf.loops[i],
+           inf.one_loop_ms[i], inf.detected[i],
+           pokey_is_dummy_time(inf.tagged_ms[i]) ? "  DUMMY3:00" : "");
+  }
+  free(data);
+}
+
+static int test_dummy_180000(const char *no_time_path)
+{
+  unsigned char *raw, *stub;
+  size_t nraw, nstub;
+  pokey_info inf0, inf3;
+
+  printf("==== dummy TIME 03:00 must not stay 180000 ====\n");
+  raw = slurp(no_time_path, &nraw);
+  if (!raw) {
+    printf("FAIL  cannot read no-TIME fixture\n");
+    g_fail++;
+    return -1;
+  }
+  if (pokey_analyze(no_time_path, raw, nraw, 1, &inf0) != 0) {
+    printf("FAIL  analyze no-TIME\n");
+    g_fail++;
+    free(raw);
+    return -1;
+  }
+  stub = insert_time_tag(raw, nraw, "TIME 03:00\r\n", &nstub);
+  free(raw);
+  if (!stub) {
+    printf("FAIL  insert TIME 03:00\n");
+    g_fail++;
+    return -1;
+  }
+  if (pokey_analyze("dummy3.sap", stub, nstub, 1, &inf3) != 0) {
+    printf("FAIL  analyze dummy 03:00\n");
+    g_fail++;
+    free(stub);
+    return -1;
+  }
+  free(stub);
+  printf("NO TIME:     tagged=%d  analyzed=%d  detected=%d\n",
+         inf0.tagged_ms[0], inf0.one_loop_ms[0], inf0.detected[0]);
+  printf("TIME 03:00:  tagged=%d  analyzed=%d  detected=%d\n",
+         inf3.tagged_ms[0], inf3.one_loop_ms[0], inf3.detected[0]);
+  if (inf3.tagged_ms[0] != 180000) {
+    printf("FAIL  injected TIME 03:00 did not parse as 180000 (got %d)\n",
+           inf3.tagged_ms[0]);
+    g_fail++;
+  }
+  if (inf3.one_loop_ms[0] == 180000 && inf3.detected[0] == 0) {
+    printf("FAIL  dummy 180000 was trusted without detect\n");
+    g_fail++;
+  }
+  /* Unless detect itself lands on ~180000 (true 3-minute tune), analyzed
+   * must not stay at the stub. Fruity Pete is ~6s. */
+  if (inf0.one_loop_ms[0] < POKEY_DETECT_CAP_MS - 50) {
+    if (inf3.one_loop_ms[0] == 180000) {
+      printf("FAIL  dummy 180000 survived analyze (detect found %d on no-TIME)\n",
+             inf0.one_loop_ms[0]);
+      g_fail++;
+    }
+    if (!inf3.detected[0]) {
+      printf("FAIL  dummy 03:00 should use silence-detect\n");
+      g_fail++;
+    }
+    if (inf3.one_loop_ms[0] < 500) {
+      printf("FAIL  dummy-path length implausibly short (%d)\n",
+             inf3.one_loop_ms[0]);
+      g_fail++;
+    }
+  }
+  return 0;
+}
+
+static int test_spy_keeps_19250(const char *spy_path)
+{
+  unsigned char *d;
+  size_t n;
+  pokey_info inf;
+
+  printf("==== Spy vs Spy tagged 19250 must stay 19250 ====\n");
+  d = slurp(spy_path, &n);
+  if (!d || pokey_analyze(spy_path, d, n, 1, &inf) != 0) {
+    printf("FAIL  spy analyze\n");
+    g_fail++;
+    free(d);
+    return -1;
+  }
+  free(d);
+  printf("tagged=%d  analyzed=%d  detected=%d  LOOP=%d\n",
+         inf.tagged_ms[0], inf.one_loop_ms[0], inf.detected[0], inf.loops[0]);
+  if (inf.tagged_ms[0] != 19250) {
+    printf("FAIL  expected ASAP GetDuration 19250, got %d\n", inf.tagged_ms[0]);
+    g_fail++;
+  }
+  if (inf.one_loop_ms[0] != 19250 || inf.detected[0]) {
+    printf("FAIL  real TIME 19250 was re-detected or changed (one_loop=%d detected=%d)\n",
+           inf.one_loop_ms[0], inf.detected[0]);
+    g_fail++;
+  }
+  return 0;
+}
+
 int main(int argc, char **argv)
 {
   const char *root = "tests/samples";
@@ -346,6 +490,27 @@ int main(int argc, char **argv)
     }
     free(d);
   }
+
+  printf("==== host dump: GetDuration vs analyze ====\n");
+  dump_file(p_spy);
+  dump_file(p_spy0);
+  dump_file(p_fru);
+  dump_file(p_fru0);
+  dump_file(p_heb);
+  dump_file(p_fc);
+  dump_file(p_vee);
+  {
+    char extra[256];
+    snprintf(extra, sizeof extra, "%s/Lasermania.sap", root);
+    dump_file(extra);
+    snprintf(extra, sizeof extra, "%s/Lasermania.cmc", root);
+    dump_file(extra);
+    snprintf(extra, sizeof extra, "%s/aurora_s.rmt", root);
+    dump_file(extra);
+  }
+
+  test_spy_keeps_19250(p_spy);
+  test_dummy_180000(p_fru0);
 
   test_file(p_spy, 1, 0);
   test_file(p_heb, 2, 0);
